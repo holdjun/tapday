@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/api/manifest" />
       </head>
       <body className="font-sans antialiased">
         <AppShell>{children}</AppShell>

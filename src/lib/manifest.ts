@@ -1,25 +1,9 @@
 import type { AppConfig } from "./db";
-
-interface ManifestIcon {
-  src: string;
-  sizes: string;
-  type: string;
-  purpose?: string;
-}
-
-interface WebAppManifest {
-  name: string;
-  short_name: string;
-  description: string;
-  start_url: string;
-  display: string;
-  background_color: string;
-  theme_color: string;
-  icons: ManifestIcon[];
-}
+import { setPwaCookie } from "./pwa-cookie";
 
 /**
  * Render an emoji to a PNG data URL at the specified size.
+ * Used for apple-touch-icon (data URLs work in iOS DOM).
  */
 export function emojiToPng(emoji: string, size: number): string {
   const canvas = document.createElement("canvas");
@@ -35,57 +19,17 @@ export function emojiToPng(emoji: string, size: number): string {
 }
 
 /**
- * Generate icon data URLs for manifest from user config.
- */
-function generateIcons(config: AppConfig): ManifestIcon[] {
-  const sizes = [192, 512];
-  return sizes.map((size) => {
-    let src: string;
-    if (config.icon.type === "image" && config.icon.imageDataUrl) {
-      src = config.icon.imageDataUrl;
-    } else {
-      src = emojiToPng(config.icon.emoji ?? "📅", size);
-    }
-    return { src, sizes: `${size}x${size}`, type: "image/png" };
-  });
-}
-
-/**
- * Generate a manifest JSON object from user config.
- */
-export function generateManifest(config: AppConfig): WebAppManifest {
-  return {
-    name: config.name,
-    short_name: config.name,
-    description: `${config.name} — Powered by Tapday`,
-    start_url: "/",
-    display: "standalone",
-    background_color: "#ffffff",
-    theme_color: config.themeColor,
-    icons: generateIcons(config),
-  };
-}
-
-let currentBlobUrl: string | null = null;
-
-/**
- * Apply the dynamic manifest to the document.
- * Creates a blob URL from the manifest JSON and updates the <link> tag.
- * Also updates iOS-specific meta tags.
+ * Apply the dynamic manifest and PWA meta tags from user config.
+ * - Syncs config to cookie (for server-side manifest route)
+ * - Updates <link rel="manifest"> with cache-busting param
+ * - Updates apple-touch-icon (data URL, works for iOS)
+ * - Updates meta tags (theme-color, apple-mobile-web-app-title)
  */
 export function applyManifest(config: AppConfig): void {
-  // Revoke previous blob URL to avoid memory leaks
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl);
-  }
+  // 1. Sync config to cookie for server-side manifest route
+  setPwaCookie(config);
 
-  const manifest = generateManifest(config);
-  const blob = new Blob([JSON.stringify(manifest)], {
-    type: "application/manifest+json",
-  });
-  currentBlobUrl = URL.createObjectURL(blob);
-
-  // Update or create <link rel="manifest">
+  // 2. Update <link rel="manifest"> with cache-busting param
   let manifestLink = document.querySelector(
     'link[rel="manifest"]',
   ) as HTMLLinkElement | null;
@@ -94,18 +38,18 @@ export function applyManifest(config: AppConfig): void {
     manifestLink.rel = "manifest";
     document.head.appendChild(manifestLink);
   }
-  manifestLink.href = currentBlobUrl;
+  manifestLink.href = `/api/manifest?v=${Date.now()}`;
 
-  // Update iOS meta tags
-  updateMetaTag("apple-mobile-web-app-title", config.name);
-  updateMetaTag("apple-mobile-web-app-capable", "yes");
-  updateMetaTag("apple-mobile-web-app-status-bar-style", "default");
-
-  // Update apple-touch-icon
-  const iconSrc =
-    config.icon.type === "image" && config.icon.imageDataUrl
-      ? config.icon.imageDataUrl
-      : emojiToPng(config.icon.emoji ?? "📅", 180);
+  // 3. Update apple-touch-icon (data URL works for iOS)
+  let iconSrc: string;
+  if (config.icon.type === "image" && config.icon.imageDataUrl) {
+    iconSrc = config.icon.imageDataUrl;
+  } else if (config.icon.type === "emoji" && config.icon.emoji) {
+    iconSrc = emojiToPng(config.icon.emoji, 180);
+  } else {
+    // Lucide or fallback: use letter-based icon via API route
+    iconSrc = `/api/icon?letter=${encodeURIComponent(config.name.charAt(0))}&color=${encodeURIComponent(config.themeColor)}&size=180`;
+  }
 
   let touchIcon = document.querySelector(
     'link[rel="apple-touch-icon"]',
@@ -117,7 +61,10 @@ export function applyManifest(config: AppConfig): void {
   }
   touchIcon.href = iconSrc;
 
-  // Update theme-color meta
+  // 4. Update meta tags
+  updateMetaTag("apple-mobile-web-app-title", config.name);
+  updateMetaTag("apple-mobile-web-app-capable", "yes");
+  updateMetaTag("apple-mobile-web-app-status-bar-style", "default");
   updateMetaTag("theme-color", config.themeColor);
 }
 

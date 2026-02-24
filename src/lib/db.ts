@@ -10,10 +10,12 @@ export interface AppConfig {
 }
 
 export interface IconConfig {
-  type: "emoji" | "image";
+  type: "emoji" | "image" | "lucide";
   emoji?: string;
   /** Base64 data URL for uploaded images or rendered emoji PNGs */
   imageDataUrl?: string;
+  /** Lucide icon name */
+  lucideIcon?: string;
 }
 
 export interface MarkerConfig {
@@ -42,19 +44,27 @@ interface TapdayDB extends DBSchema {
 }
 
 const DB_NAME = "tapday";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<TapdayDB>> | null = null;
 
 function getDB(): Promise<IDBPDatabase<TapdayDB>> {
   if (!dbPromise) {
     dbPromise = openDB<TapdayDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        db.createObjectStore("config", { keyPath: "name" });
-        const checkInStore = db.createObjectStore("checkIns", {
-          keyPath: "date",
-        });
-        checkInStore.createIndex("by-date", "date");
+      upgrade(db, oldVersion) {
+        // V1 had keyPath: "name" which conflicted with AppConfig.name
+        if (oldVersion < 2) {
+          if (db.objectStoreNames.contains("config")) {
+            db.deleteObjectStore("config");
+          }
+          db.createObjectStore("config");
+        }
+        if (!db.objectStoreNames.contains("checkIns")) {
+          const checkInStore = db.createObjectStore("checkIns", {
+            keyPath: "date",
+          });
+          checkInStore.createIndex("by-date", "date");
+        }
       },
     });
   }
@@ -80,11 +90,7 @@ export async function getConfig(): Promise<AppConfig> {
 
 export async function saveConfig(config: AppConfig): Promise<void> {
   const db = await getDB();
-  // IndexedDB keyPath is "name" on the store, but we use a fixed key
-  // We store with a synthetic key field
-  await db.put("config", { ...config, name: CONFIG_KEY } as AppConfig & {
-    name: string;
-  });
+  await db.put("config", config, CONFIG_KEY);
 }
 
 export async function getCheckIn(

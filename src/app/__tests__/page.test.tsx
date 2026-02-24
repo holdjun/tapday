@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import Home from "../page";
 
-// Mock useAppConfig hook
 const mockConfig = {
   name: "Tapday",
   icon: { type: "emoji" as const, emoji: "📅" },
@@ -20,10 +19,13 @@ vi.mock("@/hooks/use-app-config", () => ({
   }),
 }));
 
-// Mock next/navigation
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/lib/manifest", () => ({
+  applyManifest: vi.fn(),
 }));
 
 describe("Home", () => {
@@ -31,9 +33,9 @@ describe("Home", () => {
     mockConfig.setupCompleted = false;
   });
 
-  it("renders welcome message when setup not completed", () => {
+  it("renders setup wizard when setup not completed", () => {
     render(<Home />);
-    expect(screen.getByText("欢迎来到 Tapday")).toBeInTheDocument();
+    expect(screen.getByText("给你的打卡起个名字")).toBeInTheDocument();
   });
 
   it("renders app name when setup is completed", () => {

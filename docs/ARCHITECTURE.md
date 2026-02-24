@@ -43,12 +43,11 @@ tapday/
 │   │   └── use-theme.ts         # Theme color + dark mode
 │   └── lib/
 │       ├── db.ts                # IndexedDB wrapper (idb)
-│       ├── manifest.ts          # Dynamic PWA manifest generation
+│       ├── manifest.ts          # PWA meta tag + cookie sync
+│       ├── pwa-cookie.ts        # Cookie bridge for cross-context persistence
 │       ├── icons.ts             # Emoji→PNG, image compression
 │       ├── constants.ts         # Preset colors, markers, emoji categories
 │       └── utils.ts             # Shared utilities (cn())
-├── public/
-│   └── manifest.json            # Default static manifest (overridden by client)
 ├── docs/                        # Project documentation
 ├── .claude/                     # Claude Code configuration
 └── .github/                     # CI, templates, Dependabot
@@ -56,7 +55,7 @@ tapday/
 
 ## Data Flow
 
-V1 is fully client-side with local storage:
+V1 is fully client-side with local storage + cookie bridge:
 
 ```
 User opens app
@@ -64,25 +63,27 @@ User opens app
     ▼
 AppShell loads config from IndexedDB
     │
-    ├─ First visit → Setup wizard → save config → update manifest
+    ├─ IndexedDB empty + cookie exists → restore from cookie (iOS standalone bridge)
+    │
+    ├─ First visit → Setup wizard → save config → sync cookie → update manifest
     │
     └─ Returning visit → Calendar view → read/write check-ins
                              │
                              ▼
-                     IndexedDB (all data local)
+                     IndexedDB (primary) + cookie (bridge)
 ```
 
 ## Dynamic PWA Manifest
 
 The key product feature — personalized PWA installation:
 
-1. Static `manifest.json` in `/public/` serves as default
-2. After setup, client generates personalized manifest via `Blob URL`
-3. `<link rel="manifest">` href is updated to the blob URL
-4. iOS meta tags (`apple-mobile-web-app-title`, `apple-touch-icon`) also updated
+1. `/api/manifest` route serves dynamic manifest JSON, reading config from `tapday-pwa` cookie
+2. `/api/icon` route renders emoji or letter-based icons as PNG via `ImageResponse` (next/og)
+3. After setup, client syncs config to cookie and updates `<link rel="manifest">` href with cache-busting param
+4. iOS meta tags (`apple-mobile-web-app-title`, `apple-touch-icon`) updated client-side
 5. User is guided to "Add to Home Screen" after manifest is ready
 
-Emoji icons are rendered to canvas and exported as PNG data URLs for the manifest.
+Cookie bridge solves iOS storage isolation: Safari and standalone PWA share cookies but NOT IndexedDB. On first standalone launch, config is restored from cookie to IndexedDB.
 
 ## Deployment Pipeline
 
