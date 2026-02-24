@@ -5,9 +5,11 @@
 | Layer           | Technology                 | Why                                              |
 | --------------- | -------------------------- | ------------------------------------------------ |
 | Framework       | Next.js 16 (App Router)    | Server Components, file-based routing, Turbopack |
-| Language        | TypeScript (strict)        | Type safety, better DX for AI agents             |
+| Language        | TypeScript (strict)        | Type safety, better DX                           |
 | Styling         | Tailwind CSS 4 + shadcn/ui | Utility-first, copy-paste components             |
-| Auth & DB       | Supabase (Auth + Postgres) | OSS, row-level security, real-time               |
+| Animation       | Framer Motion              | 声明式动画，spring 物理引擎                      |
+| Effects         | canvas-confetti            | 轻量打卡粒子效果                                 |
+| Storage         | IndexedDB (idb)            | 本地持久化，支持二进制数据                       |
 | Testing         | Vitest + Testing Library   | Fast, Vite-native, React support                 |
 | Package Manager | pnpm                       | Fast, strict, disk-efficient                     |
 | Linting         | ESLint + Prettier          | Consistent code style                            |
@@ -17,39 +19,70 @@
 ## Directory Structure
 
 ```
-coding-agent-template/
+tapday/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx           # Root layout (fonts, metadata)
-│   │   ├── page.tsx             # Home page
-│   │   ├── globals.css          # Global styles + Tailwind
-│   │   ├── auth/callback/       # OAuth/magic link callback route
-│   │   ├── dashboard/page.tsx   # Protected dashboard (Server Component)
-│   │   ├── login/
-│   │   │   ├── page.tsx         # Login page (Server Component)
-│   │   │   └── actions.ts       # Server Actions (login, signup, logout)
+│   │   ├── layout.tsx           # Root layout (metadata, PWA tags, AppShell)
+│   │   ├── page.tsx             # Home — Setup or Calendar view
+│   │   ├── globals.css          # Global styles + Tailwind + theme system
+│   │   ├── stats/page.tsx       # Statistics page (V1.1)
+│   │   ├── settings/page.tsx    # Settings page
 │   │   └── __tests__/           # Page-level tests
 │   ├── components/
 │   │   ├── ui/                  # shadcn/ui components (CLI-managed)
-│   │   ├── login-form.tsx       # Login/signup form (Client Component)
-│   │   ├── dashboard-content.tsx # Dashboard UI (Client Component)
+│   │   ├── app-shell.tsx        # Root client shell (config, theme, manifest)
+│   │   ├── setup/               # Setup wizard components
+│   │   ├── calendar/            # Calendar view components
+│   │   ├── settings/            # Settings panel components
+│   │   ├── common/              # Shared components (bottom nav, pickers)
+│   │   ├── pwa/                 # PWA manifest management
 │   │   └── __tests__/           # Component-level tests
-│   ├── hooks/                   # Custom React hooks
-│   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts        # Browser Supabase client
-│   │   │   └── server.ts        # Server Supabase client
-│   │   └── utils.ts             # Shared utilities (cn(), etc.)
-│   └── middleware.ts            # Auth session refresh + route protection
-├── supabase/
-│   └── migrations/              # SQL migrations (RLS, triggers)
+│   ├── hooks/
+│   │   ├── use-app-config.ts    # User config CRUD (IndexedDB)
+│   │   ├── use-check-ins.ts     # Check-in records + stats
+│   │   └── use-theme.ts         # Theme color + dark mode
+│   └── lib/
+│       ├── db.ts                # IndexedDB wrapper (idb)
+│       ├── manifest.ts          # Dynamic PWA manifest generation
+│       ├── icons.ts             # Emoji→PNG, image compression
+│       ├── constants.ts         # Preset colors, markers, emoji categories
+│       └── utils.ts             # Shared utilities (cn())
+├── public/
+│   └── manifest.json            # Default static manifest (overridden by client)
 ├── docs/                        # Project documentation
 ├── .claude/                     # Claude Code configuration
-│   ├── settings.json            # Permissions and hooks
-│   ├── skills/                  # Invokable workflows (/submit)
-│   └── agents/                  # Specialized agents (reviewer)
 └── .github/                     # CI, templates, Dependabot
 ```
+
+## Data Flow
+
+V1 is fully client-side with local storage:
+
+```
+User opens app
+    │
+    ▼
+AppShell loads config from IndexedDB
+    │
+    ├─ First visit → Setup wizard → save config → update manifest
+    │
+    └─ Returning visit → Calendar view → read/write check-ins
+                             │
+                             ▼
+                     IndexedDB (all data local)
+```
+
+## Dynamic PWA Manifest
+
+The key product feature — personalized PWA installation:
+
+1. Static `manifest.json` in `/public/` serves as default
+2. After setup, client generates personalized manifest via `Blob URL`
+3. `<link rel="manifest">` href is updated to the blob URL
+4. iOS meta tags (`apple-mobile-web-app-title`, `apple-touch-icon`) also updated
+5. User is guided to "Add to Home Screen" after manifest is ready
+
+Emoji icons are rendered to canvas and exported as PNG data URLs for the manifest.
 
 ## Deployment Pipeline
 
@@ -66,20 +99,3 @@ Developer/AI pushes to feature branch
         ▼
   Vercel auto-deploys from main
 ```
-
-## Data Flow
-
-**Phase 2 (Current):** Supabase handles authentication and data persistence.
-
-```
-Browser → Middleware (refresh session) → Server Component → Supabase
-                                          ↓
-                                    Client Component ← user prop
-                                          ↓
-                                    Server Action → Supabase (mutate)
-```
-
-- **Middleware** refreshes the auth session on every request and enforces route protection
-- **Server Components** read user/data via the server Supabase client
-- **Client Components** receive data as props; mutations go through Server Actions
-- **RLS policies** on Postgres enforce row-level access — no server-side auth checks needed for data queries
