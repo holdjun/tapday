@@ -1,9 +1,12 @@
 "use client";
 
 import { useAppConfig } from "@/hooks/use-app-config";
+import { SetupWizard } from "@/components/setup/setup-wizard";
+import type { AppConfig } from "@/lib/db";
+import { applyManifest } from "@/lib/manifest";
 
 export default function Home() {
-  const { config, loading } = useAppConfig();
+  const { config, loading, updateConfig } = useAppConfig();
 
   if (loading) {
     return null;
@@ -11,20 +14,23 @@ export default function Home() {
 
   if (!config.setupCompleted) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center p-6 text-center">
-        <div className="text-6xl">📅</div>
-        <h1 className="mt-6 text-2xl font-bold">欢迎来到 Tapday</h1>
-        <p className="text-muted-foreground mt-2">
-          Setup 向导即将在下一版本上线
-        </p>
-      </div>
+      <SetupWizard
+        onComplete={async (newConfig: AppConfig) => {
+          await updateConfig(newConfig);
+          applyManifest(newConfig);
+        }}
+      />
     );
   }
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center p-6 text-center">
       <div className="text-6xl">
-        {config.icon.type === "emoji" ? config.icon.emoji : "📅"}
+        {config.icon.type === "emoji"
+          ? config.icon.emoji
+          : config.icon.type === "lucide"
+            ? config.icon.lucideIcon
+            : "📅"}
       </div>
       <h1 className="mt-6 text-2xl font-bold">{config.name}</h1>
       <p className="text-muted-foreground mt-2">
