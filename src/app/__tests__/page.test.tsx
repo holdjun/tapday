@@ -1,23 +1,44 @@
-import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
 import Home from "../page";
 
-afterEach(cleanup);
+// Mock useAppConfig hook
+const mockConfig = {
+  name: "Tapday",
+  icon: { type: "emoji" as const, emoji: "📅" },
+  marker: { type: "emoji" as const, emoji: "✅" },
+  themeColor: "#f97316",
+  setupCompleted: false,
+  darkMode: "system" as const,
+};
 
-test("renders the hello world title", () => {
-  render(<Home />);
-  expect(screen.getByText("Hello World")).toBeInTheDocument();
-});
+vi.mock("@/hooks/use-app-config", () => ({
+  useAppConfig: () => ({
+    config: mockConfig,
+    loading: false,
+    updateConfig: vi.fn(),
+  }),
+}));
 
-test("renders dashboard link", () => {
-  render(<Home />);
-  const link = screen.getByRole("link", { name: /dashboard/i });
-  expect(link).toHaveAttribute("href", "/dashboard");
-});
+// Mock next/navigation
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
-test("renders sign in link", () => {
-  render(<Home />);
-  const link = screen.getByRole("link", { name: /sign in/i });
-  expect(link).toHaveAttribute("href", "/login");
+describe("Home", () => {
+  beforeEach(() => {
+    mockConfig.setupCompleted = false;
+  });
+
+  it("renders welcome message when setup not completed", () => {
+    render(<Home />);
+    expect(screen.getByText("欢迎来到 Tapday")).toBeInTheDocument();
+  });
+
+  it("renders app name when setup is completed", () => {
+    mockConfig.setupCompleted = true;
+    render(<Home />);
+    expect(screen.getByText("Tapday")).toBeInTheDocument();
+  });
 });
